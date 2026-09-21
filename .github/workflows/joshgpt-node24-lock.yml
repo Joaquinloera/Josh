@@ -21,7 +21,7 @@ jobs:
           npm config get registry
           unzip -q JOSHGPT_NODE24_RUNNER_READY.zip -d /tmp/outer
           find /tmp/outer -type f -maxdepth 3 -print
-          ZIP=$(find /tmp/outer -type f -name 'JOSHGPT_AGENT_TEAM_V10_9_BASELINE.zip' | head -1)
+          ZIP=$(find /tmp/outer -type f -name 'JOSHGPT_NATIVE_PORTAL_V10_9_CHECKPOINT.zip' | head -1)
           test -n "$ZIP"
           echo "Baseline: $ZIP"
           echo "7fd2cd735525a31a5bfaf41b44a8cb082b15103af5151b1fdd679d556dd786f6  $ZIP" | sha256sum -c -
