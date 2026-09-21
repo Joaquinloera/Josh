@@ -6,43 +6,96 @@ on:
 jobs:
   lock:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+    timeout-minutes: 15
 
-      - uses: actions/setup-node@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
         with:
           node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Build genuine lock
         shell: bash
         run: |
+          set -euo pipefail
+
           node --version
           npm --version
           npm config get registry
+
+          rm -rf /tmp/outer /tmp/josh /tmp/result
+          mkdir -p /tmp/outer /tmp/josh /tmp/result
+
           unzip -q JOSHGPT_NODE24_RUNNER_READY.zip -d /tmp/outer
-          find /tmp/outer -type f -maxdepth 3 -print
-          ZIP=$(find /tmp/outer -type f -name 'JOSHGPT_NATIVE_PORTAL_V10_9_CHECKPOINT.zip' | head -1)
-          test -n "$ZIP"
+
+          echo "Files inside runner package:"
+          find /tmp/outer -maxdepth 4 -type f -print
+
+          ZIP="$(find /tmp/outer -type f -name 'JOSHGPT_NATIVE_PORTAL_V10_9_CHECKPOINT.zip' -print -quit)"
+
+          if [ -z "$ZIP" ]; then
+            echo "ERROR: authoritative V10.9 baseline ZIP not found"
+            exit 1
+          fi
+
           echo "Baseline: $ZIP"
-          echo "7fd2cd735525a31a5bfaf41b44a8cb082b15103af5151b1fdd679d556dd786f6  $ZIP" | sha256sum -c -
-          mkdir /tmp/josh
+
+          EXPECTED="7fd2cd735525a31a5bfaf41b44a8cb082b15103af5151b1fdd679d556dd786f6"
+          ACTUAL="$(sha256sum "$ZIP" | awk '{print $1}')"
+
+          echo "Expected SHA256: $EXPECTED"
+          echo "Actual SHA256:   $ACTUAL"
+
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "ERROR: baseline SHA256 mismatch"
+            exit 1
+          fi
+
           unzip -q "$ZIP" -d /tmp/josh
-          PROJECT=$(find /tmp/josh -name package.json -printf '%h\n' | head -1)
-          test -n "$PROJECT"
+
+          PACKAGE="$(find /tmp/josh -type f -name package.json -print -quit)"
+
+          if [ -z "$PACKAGE" ]; then
+            echo "ERROR: package.json not found"
+            exit 1
+          fi
+
+          PROJECT="$(dirname "$PACKAGE")"
+          echo "Project: $PROJECT"
           cd "$PROJECT"
-          node -e "let p=require('./package.json');if(p.version!=='10.9.0'||p.dependencies?.['@netlify/blobs']!=='11.1.0')process.exit(1)"
+
+          node -e "const p=require('./package.json'); if(p.version!=='10.9.0') { console.error('Wrong project version:',p.version); process.exit(1); } if(p.dependencies?.['@netlify/blobs']!=='11.1.0') { console.error('Wrong @netlify/blobs version:',p.dependencies?.['@netlify/blobs']); process.exit(1); } console.log('JoshGPT version:',p.version); console.log('@netlify/blobs:',p.dependencies['@netlify/blobs']);"
+
+          rm -f package-lock.json
+
           npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+          test -f package-lock.json
+
+          echo "Generated package-lock:"
           sha256sum package-lock.json
+
+          npm ls @netlify/blobs --package-lock-only
+
           npm ci
           npm test
           npm run check
           npm run preflight
           npm run dependency:lock-verify
-          mkdir /tmp/result
+
           cp package-lock.json /tmp/result/
           sha256sum package-lock.json > /tmp/result/package-lock.sha256
+          node --version > /tmp/result/node-version.txt
+          npm --version > /tmp/result/npm-version.txt
+          npm config get registry > /tmp/result/npm-registry.txt
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload verified dependency artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: JOSHGPT_NODE24_RESULT
+          name: JOSHGPT_V10_9_NODE24_DEPENDENCY_RESULT
           path: /tmp/result/
+          if-no-files-found: error
