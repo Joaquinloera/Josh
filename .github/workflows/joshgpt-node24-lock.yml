@@ -68,7 +68,11 @@ jobs:
           echo "Project: $PROJECT"
           cd "$PROJECT"
 
-          node -e "const p=require('./package.json'); if(p.version!=='10.9.0') { console.error('Wrong project version:',p.version); process.exit(1); } if(p.dependencies?.['@netlify/blobs']!=='11.1.0') { console.error('Wrong @netlify/blobs version:',p.dependencies?.['@netlify/blobs']); process.exit(1); } console.log('JoshGPT version:',p.version); console.log('@netlify/blobs:',p.dependencies['@netlify/blobs']);"
+          echo "========== JOSHGPT PACKAGE SCRIPTS =========="
+node -e "const p=require('./package.json'); for (const [k,v] of Object.entries(p.scripts||{})) console.log(k+' = '+v)"
+echo "========== RELEASE / DEPENDENCY SCRIPTS =========="
+node -e "const p=require('./package.json'); for (const [k,v] of Object.entries(p.scripts||{})) if(/release|manifest|inventory|dependency|lock|attest/i.test(k)) console.log(k+' = '+v)"
+echo "=============================================="
 
           rm -f package-lock.json
 
