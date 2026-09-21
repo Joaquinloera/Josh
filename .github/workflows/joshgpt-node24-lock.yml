@@ -1,0 +1,48 @@
+name: JoshGPT Node24 Lock
+
+on:
+  workflow_dispatch:
+
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Build genuine lock
+        shell: bash
+        run: |
+          node --version
+          npm --version
+          npm config get registry
+          unzip -q JOSHGPT_NODE24_RUNNER_READY.zip -d /tmp/outer
+          find /tmp/outer -type f -maxdepth 3 -print
+          ZIP=$(find /tmp/outer -type f -name 'JOSHGPT_AGENT_TEAM_V10_9_BASELINE.zip' | head -1)
+          test -n "$ZIP"
+          echo "Baseline: $ZIP"
+          echo "7fd2cd735525a31a5bfaf41b44a8cb082b15103af5151b1fdd679d556dd786f6  $ZIP" | sha256sum -c -
+          mkdir /tmp/josh
+          unzip -q "$ZIP" -d /tmp/josh
+          PROJECT=$(find /tmp/josh -name package.json -printf '%h\n' | head -1)
+          test -n "$PROJECT"
+          cd "$PROJECT"
+          node -e "let p=require('./package.json');if(p.version!=='10.9.0'||p.dependencies?.['@netlify/blobs']!=='11.1.0')process.exit(1)"
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          sha256sum package-lock.json
+          npm ci
+          npm test
+          npm run check
+          npm run preflight
+          npm run dependency:lock-verify
+          mkdir /tmp/result
+          cp package-lock.json /tmp/result/
+          sha256sum package-lock.json > /tmp/result/package-lock.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: JOSHGPT_NODE24_RESULT
+          path: /tmp/result/
